@@ -1,6 +1,6 @@
 using JuMP, Gurobi
 
-mutable struct Node
+type Node
     Level::Int
     Model::JuMP.Model
     Zbound::Float64
@@ -8,20 +8,24 @@ mutable struct Node
     Status::Symbol
 end
 
-mutable struct Best
+type Best
     Zstar::Float64
     Xstar::Array{Float64}
     Visited::Int
 end
 
-function IndeciseVariable(Xrelax::Array{Float64})
-    sizeX = length(Xrelax)
+function IndeciseVariable(node::Node)
+    sizeX = length(node.Xrelax)
     nonInteger = Array{Float64}(sizeX)
     for i=1:sizeX
-        nonInteger[i] = abs(Xrelax[i] - 0.5)
+        if node.Model.colCat[i] == :Bin
+            nonInteger[i] = abs(node.Xrelax[i] - 0.5)
+        else
+            nonInteger[i] = 2 #Variable is not binary
+        end
     end
     mostInDoubt = indmin(nonInteger) #get index of the most fractionary variable
-    if nonInteger[mostInDoubt] == 0.5 #all variables are 0 or 1
+    if nonInteger[mostInDoubt] == 0.5  #all variables are 0 or 1
         return false
     end
     return mostInDoubt
@@ -47,8 +51,8 @@ function Bound(node::Node, best::Best, sense::Symbol)
 end
 
 function Branch(node::Node)
-    indeciseVariable = IndeciseVariable(node.Xrelax)
-    if indeciseVariable == false #if all variables are integer -> no branching
+    indeciseVariable = IndeciseVariable(node)
+    if indeciseVariable == false #if all binary variables are integer -> no branching
         return false, false
     end
 
@@ -86,41 +90,52 @@ end
 
 function SolveRelax(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver)
     setsolver(model, solver)
-    status = solve(model, relaxation = true)
+    status = solve(model, relaxation = true) #solve model relaxation
     return status, getobjectivevalue(model), model.colVal
 end
 
-function UpdateBest(best::Best, node::Node, sense::Symbol)
+function UpdateBest(best::Best, node::Node, sense::Symbol, binaryVariables::Array{Int})
     if sense == :Max
-        if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax))
+        if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax[binaryVariables])) #if the bound is better and if all binary variables are integer
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
         end
     else
-        if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax))
+        if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax[binaryVariables]))
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
         end
     end
 end
 
+function BinaryVariables(model::JuMP.Model)
+    binaryVariableIndexes = Array{Int}(0)
+    for i=1:length(model.colCat)
+        if model.colCat[i] == :Bin
+            push!(binaryVariableIndexes,i) #gets index of all binary variables
+        end
+    end
+    return binaryVariableIndexes
+end
 
 function SolveMIP(model::JuMP.Model)
     tic()
-    solver = GurobiSolver(OutputFlag=0)
     iter = 0
     level = 0
+    solver = GurobiSolver(OutputFlag=0)
     sense = getobjectivesense(model)
     best = InitializeBest(model)
     nodes = Array{Node}(1)
-    nodes[1] = InitializeHeadNode(model, sense) #nó raiz
+    binaryVariableIndexes = BinaryVariables(model) #gets index of all binary variables
+    nodes[1] = InitializeHeadNode(model, sense) #root node
     nodes[1].Status, nodes[1].Zbound, nodes[1].Xrelax = SolveRelax(nodes[1].Model,solver)
     model.ext[:status] = nodes[1].Status
-    UpdateBest(best,nodes[1],sense)
+    UpdateBest(best, nodes[1], sense, binaryVariableIndexes) #updates best answer
     best.Visited = best.Visited + 1
 
     while (!isempty(nodes) && iter <= 1000)
         level = level + 1
+        println(level)
         leftChild, rightChild = Branch(nodes[end])
         pop!(nodes)
 
@@ -128,7 +143,7 @@ function SolveMIP(model::JuMP.Model)
             statusLeftChild, boundLeftChild, xRelaxLeftChild = SolveRelax(leftChild, solver)
             best.Visited = best.Visited + 1
             nodeLeftChild = Node(level, leftChild, boundLeftChild, xRelaxLeftChild, statusLeftChild)
-            UpdateBest(best, nodeLeftChild, sense)
+            UpdateBest(best, nodeLeftChild, sense, binaryVariableIndexes)
             if Bound(nodeLeftChild, best, sense) != false
                 push!(nodes, nodeLeftChild)
             end
@@ -138,17 +153,25 @@ function SolveMIP(model::JuMP.Model)
             statusRightChild, boundRightChild, xRelaxRightChild = SolveRelax(rightChild, solver)
             best.Visited = best.Visited + 1
             nodeRightChild = Node(level, rightChild, boundRightChild, xRelaxRightChild, statusRightChild)
-            UpdateBest(best,nodeRightChild, sense)
+            UpdateBest(best,nodeRightChild, sense, binaryVariableIndexes)
             if Bound(nodeRightChild, best, sense) != false
                 push!(nodes, nodeRightChild)
             end
         end
         iter = iter + 1
     end
-    time = toc()
+
+    if (iter >= 1000 && all(isinteger, best.Xstar[BinaryVariables]))
+        model.ext[:status] = :SubOptimal
+    elseif (iter >= 1000 && not(all(isinteger, best.Xstar[BinaryVariables])))
+        mode.ext[:status] = :NotResolved
+    end
 
     model.ext[:Visited] = best.Visited
-    model.ext[:Time] = time
     model.colVal = best.Xstar
     model.objVal = best.Zstar
+
+
+    time = toc()
+    model.ext[:Time] = time
 end
