@@ -1,6 +1,6 @@
 using JuMP, Gurobi
 
-type Node
+mutable struct Node
     Level::Int
     Model::JuMP.Model
     Zbound::Float64
@@ -8,7 +8,7 @@ type Node
     Status::Symbol
 end
 
-type Best
+mutable struct Best
     Zstar::Float64
     Xstar::Array{Float64}
     Visited::Int
@@ -84,7 +84,7 @@ function InitializeBest(model::JuMP.Model)
     return best
 end
 
-function SolveRelax(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+function SolveRelax(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver)
     setsolver(model, solver)
     status = solve(model, relaxation = true)
     return status, getobjectivevalue(model), model.colVal
@@ -92,20 +92,22 @@ end
 
 function UpdateBest(best::Best, node::Node, sense::Symbol)
     if sense == :Max
-        if (node.Zbound > best.Zstar && isinteger(node.Xrelax))
+        if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax))
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
         end
     else
-        if (node.Zbound < best.Zstar && isinteger(node.Xrelax))
+        if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax))
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
         end
     end
 end
 
-function SolveMIP(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+
+function SolveMIP(model::JuMP.Model)
     tic()
+    solver = GurobiSolver(OutputFlag=0)
     iter = 0
     level = 0
     sense = getobjectivesense(model)
@@ -113,6 +115,7 @@ function SolveMIP(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver
     nodes = Array{Node}(1)
     nodes[1] = InitializeHeadNode(model, sense) #nó raiz
     nodes[1].Status, nodes[1].Zbound, nodes[1].Xrelax = SolveRelax(nodes[1].Model,solver)
+    model.ext[:status] = nodes[1].Status
     UpdateBest(best,nodes[1],sense)
     best.Visited = best.Visited + 1
 
@@ -144,55 +147,8 @@ function SolveMIP(model::JuMP.Model, solver::MathProgBase.AbstractMathProgSolver
     end
     time = toc()
 
-    m.ext[:Visited] = best.Visited
-    m.ext[:Time] = time
+    model.ext[:Visited] = best.Visited
+    model.ext[:Time] = time
     model.colVal = best.Xstar
     model.objVal = best.Zstar
 end
-
-SolveMIP(m, GurobiSolver())
-m.objVal
-m.colVal
-
-m = Model()
-@variable(m, x[i=1:3], Bin)
-@constraint(m, 6*x[1] + 5*x[2] + 5*x[3] <= 10)
-@objective(m, Max, 6*x[1] + 4*x[2] + 3*x[3])
-
-
-n = 9
-model = Model()
-@variable(model, x[i in 1:n, j in 1:n, k in 1:n], Bin)
-
-fixas = [(1,3,4), (1,5,6), (1,9,2), (2,1,8), (2,3,5), (2,6,2), (2,8,3),
-        (3,5,3), (3,8,6), (4,2,2), (4,3,8), (5,6,4), (6,1,7), (6,5,5),
-        (6,9,9), (7,3,2), (7,6,1), (8,2,7), (8,5,4), (8,7,9), (8,8,5),
-        (9,1,6), (9,8,4)]
-for idx in fixas
-    @constraint(model, x[idx...] == 1)
-end
-@constraint(model, [j in 1:n, k in 1:n], sum(x[:,j,k]) == 1)
-@constraint(model, [i in 1:n, k in 1:n], sum(x[i,:,k]) == 1)
-@constraint(model, [i in 1:n, j in 1:n], sum(x[i,j,:]) == 1)
-@constraint(model, [p in [0,3,6], q in [0,3,6], k in 1:n], sum(sum(x[i+p,j+q,k] for i in 1:3) for j in 1:3) == 1)
-@objective(model, Min, 0)
-
-SolveMIP(model, GurobiSolver())
-
-sum(model.colVal)
-
-
-model.colVal
-
-model = Model()
-@variable(model, x[i=1:2]>=0)
-@variable(model, u, Bin)
-@objective(model, Max, 4*x[1] + 3*x[2] - u*Cinv)
-
-@constraint(model, 2*x[1] + 1*x[2] <= 4 +u*M)
-@constraint(model, 1*x[1] + 2*x[2] <= 4 +u*M)
-
-@constraint(model, 1*x[1] + 0.1*x[2] <= 4 +(1-u)*M)
-@constraint(model, 0.4*x[1] + 1*x[2] <= 4 +(1-u)*M)
-
-SolveMIP(model, GurobiSolver())
