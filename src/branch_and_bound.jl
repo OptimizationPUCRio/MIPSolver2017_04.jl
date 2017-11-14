@@ -32,37 +32,36 @@ function IndeciseVariable(Xrelax::Array{Float64})
     if nonInteger[mostInDoubt] == 0.5 #all variables are 0 or 1
         return false
     end
-
     return mostInDoubt
 end
 
-function Bound(node::Node, best::Best, sense::Symbol, errortolerance::Float64)
+function Bound(node::Node, best::Best, errortolerance::Float64)
 
     errortolerance = 1e-4 #if 0.01% away from optimal -> current answer is optimal
 
     if node.status != :Optimal #Bound by Infeasabilty
-        return false
+        return true
     end
 
-    if sense == :Max #Bound by Limit
+    if node.model.objSense == :Max #Bound by Limit
         if node.Z_lb > best.Zstar
-            return false
+            return true
         end
     else
         if node.Z_ub < best.Zstar
-            return false
+            return true
         end
     end
 
     if abs(node.Z_ub - node.Z_lb) <= errortolerance #Bound by Optimality
-        return false
+        return true
     end
 end
 
 function Branch(node::Node)
 
     indeciseVariable = IndeciseVariable(node.Xrelax)
-    if !indeciseVariable #if all variables are integer -> no branching
+    if indeciseVariable == false #if all variables are integer -> no branching
         return false
     end
 
@@ -76,38 +75,56 @@ function Branch(node::Node)
     rightChild.colUpper[indeciseVariable] == 1
     rightChild.colLower[indeciseVariable] == 1
 
-    node.Level = node.Level + 1
     return leftChild, rightChild
 end
 
-function InitializeHeadNode(model::JuMP.Model)
-            #Level,    Model,   Z_ub,  Z_lb,           Xrelax,                        Status
-    node = Node(0, copy(model), 1e10, -1e10, Array{Float64}(length(model.colUpper)), :None)
+function InitializeHeadNode(nodes::Array{Node})
+                 #Level,    Model,   Z_ub,  Z_lb,           Xrelax,                        Status
+    nodes[1] = Node(0, copy(model), 1e10, -1e10, Array{Float64}(length(model.colUpper)), :None)
 end
 
 function InitializeBest(model::JuMP.Model)
-    sense = getobjectivesense(model)
                #Zstar,              Xstar,                 Visited
     best = Best(-Inf, Array{Float64}(length(model.colUpper)),0) #initialize Best as a Max problem
-
-    if sense == :Min
+    if model.objSense == :Min
         best.Zstar = Inf
     end
-
     return best
 end
 
-function SolveRelax(model::JuMP.Model)
+function SolveRelaxedModel(model::JuMP.Model)
+    solve(model, relaxation = true)
+    return getobjectivevalue(model)
+end
+
+
+function BuildNodes()
 
 
 function solveMIP(model::JuMP.Model)
-    InitializeBest(model)
-    InitializeHeadNode(model)
-    Xstar = []
-    nodes = Array{node}(1)
-    nodes[1] = node(0,model) #nó raiz
+    nodes = Array{Node}(1)
+    InitializeHeadNode(nodes) #nó raiz
+    best = InitializeBest(model)
+    maxIter = 1000
+
+    while (!isempty(nodes) && iter<maxIter)
 
 end
+
+getindex(model)
+
+model
+SolveRelaxedModel(model)
+
+nodes = Array{Node}(1)
+InitializeHeadNode(nodes)
+nodes[1]
+nodes[1].Xrelax = getvalue(x)
+nodes
+
+Branch(nodes[1])
+
+IndeciseVariable(getvalue(x))
 
 a = :Min
 typeof(a)
@@ -117,6 +134,35 @@ model = Model(solver = GurobiSolver())
 @constraint(model, 6*x[1] + 5*x[2] + 5*x[3] <= 10)
 @objective(model, Max, 6*x[1] + 4*x[2] + 3*x[3])
 model
+model.objSense
+solve(model, relaxation = true)
+getvalue(x)
+obj = getobjective(model)
+getobjectivevalue(model)
+getDual(x)
+
+getvalue(obj)
+
+
+model.colCat
+
+nodes = Array{Node}(1)
+nodes[1] = InitializeHeadNode(nodes)
+nodes
+
+leftChild = Array{Node}(1)
+leftChild = InitializeHeadNode(leftChild)
+leftChild
+push!(nodes,leftChild)
+
+
+nodes
+
+typeof(node)
+node
+
+
+
 status = solve(model, relaxation = true)
 X = getvalue(x)
 IndeciseVariable(X)
@@ -132,9 +178,7 @@ m = copy(model)
 m.colUpper
 
 m
-
 solveMIP(model)
-
 model.colUpper
 model.colLower
 
