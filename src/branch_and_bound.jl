@@ -11,6 +11,7 @@ end
 mutable struct Best
     Zstar::Float64
     Xstar::Array{Float64}
+    Intsols::Int
     Visited::Int
 end
 
@@ -80,10 +81,11 @@ end
 
 function InitializeBest(model::JuMP.Model)
     sense = getobjectivesense(model)
-               #Zstar,              Xstar,                 Visited
-    best = Best( -Inf, Array{Float64}(length(model.colUpper)),0) #initialize Best as a Max problem
+               #Zstar,             Xstar,                  Intsols    Visited
+    best = Best( -Inf,  Array{Float64}(length(model.colUpper)), 0 ,0) #initialize Best as a Max problem
     if sense == :Min
         best.Zstar = Inf
+        best.Zbound = -Inf
     end
     return best
 end
@@ -99,11 +101,13 @@ function UpdateBest(best::Best, node::Node, sense::Symbol, binaryVariables::Arra
         if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax[binaryVariables])) #if the bound is better and if all binary variables are integer
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
+            best.Intsols = best.Intsols + 1
         end
     else
         if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax[binaryVariables]))
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
+            best.Intsols = best.Intsols + 1
         end
     end
 end
@@ -121,6 +125,7 @@ end
 function SolveMIP(model::JuMP.Model)
     tic()
     iter = 0
+    maxiter = 1000
     level = 0
     solver = GurobiSolver(OutputFlag=0)
     sense = getobjectivesense(model)
@@ -133,7 +138,7 @@ function SolveMIP(model::JuMP.Model)
     UpdateBest(best, nodes[1], sense, binaryVariableIndexes) #updates best answer
     best.Visited = best.Visited + 1
 
-    while (!isempty(nodes) && iter <= 1000)
+    while (!isempty(nodes) && iter <= maxiter)
         level = level + 1
         leftChild, rightChild = Branch(nodes[end])
         pop!(nodes)
@@ -160,17 +165,17 @@ function SolveMIP(model::JuMP.Model)
         iter = iter + 1
     end
 
-    if (iter >= 1000 && all(isinteger, best.Xstar[BinaryVariables]))
+    if (iter >= maxiter && all(isinteger, best.Xstar[binaryVariableIndexes]))
         model.ext[:status] = :SubOptimal
-    elseif (iter >= 1000 && not(all(isinteger, best.Xstar[BinaryVariables])))
+    elseif (iter >= maxiter && not(all(isinteger, best.Xstar[binaryVariableIndexes])))
         mode.ext[:status] = :NotResolved
     end
 
-    model.ext[:Visited] = best.Visited
+    model.ext[:nodes] = best.Visited
+    model.ext[:intsols] = best.Intsols
     model.colVal = best.Xstar
     model.objVal = best.Zstar
-
-
+    model.objBound = best.Zstar
     time = toc()
-    model.ext[:Time] = time
+    model.ext[:time] = time
 end
