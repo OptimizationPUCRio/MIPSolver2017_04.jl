@@ -57,12 +57,12 @@ function Branch(node::Node)
         return false, false
     end
 
-    leftChild = copy(node.Model)
+    leftChild = deepcopy(node.Model)
     # Forces the most indecise variable to be 0
     leftChild.colUpper[indeciseVariable] = 0
     leftChild.colLower[indeciseVariable] = 0
 
-    rightChild = copy(node.Model)
+    rightChild = deepcopy(node.Model)
     # Forces the most indecise variable to be 0
     rightChild.colUpper[indeciseVariable] = 1
     rightChild.colLower[indeciseVariable] = 1
@@ -72,7 +72,7 @@ end
 
 function InitializeHeadNode(model::JuMP.Model, sense::Symbol)
             #Level,    Model,   Zbound,             Xrelax,                 Status
-    node = Node(0, copy(model), Inf, Array{Float64}(length(model.colUpper)), :None)
+    node = Node(0, deepcopy(model), Inf, Array{Float64}(length(model.colUpper)), :None)
     if sense == :Min
         node.Zbound = -Inf
     end
@@ -166,7 +166,7 @@ function SolveMIP(model::JuMP.Model)
 
     if (iter >= maxiter && all(isinteger, best.Xstar[binaryVariableIndexes]))
         model.ext[:status] = :SubOptimal
-    elseif (iter >= maxiter && not(all(isinteger, best.Xstar[binaryVariableIndexes])))
+    elseif (iter >= maxiter && ~(all(isinteger, best.Xstar[binaryVariableIndexes])))
         mode.ext[:status] = :NotResolved
     end
 
