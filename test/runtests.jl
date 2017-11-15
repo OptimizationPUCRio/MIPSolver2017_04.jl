@@ -3,102 +3,169 @@ include("/Users/guilhermebodin/Documents/PUC/MIPSolver2017_04.jl/src/branch_and_
 
 function testRoutine(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
     @testset "Testes" begin
-        test1(solveMIP)
-        test2(solveMIP)
-        testSudoku(solveMIP)
-        testSudoku4x4(solveMIP)
-        testInfeasibleKnapsack(solveMIP)
-        testInfeasibleUC(solveMIP)
-        testUnboundedKnapsack(solveMIP)
-        test_MIP_Minimal_Brito(solveMIP)
-        test_PL_Unbounded_Brito(solveMIP)
-        test_PL_Infeasible_Brito(solveMIP)
-        test_PL_Simples_Raphael(solveMIP)
-        test_Minimal_UC(solveMIP)
-        test_PL_Infeasible_Raphael(solveMIP)
-        teste_PL_andrew_inviavel(solveMIP)
-        test3_2(solveMIP)
-        test3_3(solveMIP)
-        testMinimalTSP(solveMIP)
+
+        solver = GurobiSolver(OutputFlag = 0)
+
+        test1(solveMIP, solver)
+        test2(solveMIP, solver)
+        testSudoku(solveMIP, solver)
+        test3(SolveMIP, solver)
+        testInfeasibleKnapsack(solveMIP, solver)
+        test_P1_Brito(solveMIP, solver)
+        test_PL_Simples_Raphael(solveMIP, solver)
+        test_PL_Infeasible_Brito(solveMIP, solver)
+        test_PL_Unbounded_Brito(solveMIP, solver)
+        test_MIP_Minimal_Brito(solveMIP, solver)
+        test_MIP_Pequeno_Brito(solveMIP, solver)
+        #testRobustCCUC(solveMIP, solver)
+        testCaminho(solveMIP, solver)
+        test3_2(solveMIP, solver)
+        test3_3(solveMIP, solver)
+        test_feature_selection_pequeno_viavel(solveMIP, solver)
+        test_feature_selection_medio(solveMIP, solver)
+        test_feature_selection_grande(solveMIP, solver)
+        test_feature_selection_pequeno_inviavel(solveMIP, solver)
+        teste_PL_andrew_unbounded(solveMIP, solver)
+        teste_PL_andrew_viavel(solveMIP, solver)
+        teste_PL_andrew_inviavel(solveMIP, solver)
+        testUnboundedKnapsack(solveMIP, solver)
+        testInfeasibleUC(solveMIP, solver)
+        test_PL_Simples_Raphael(solveMIP, solver)
+        test_PL_Infeasible_Raphael(solveMIP, solver)
+        test_Minimal_UC(solveMIP, solver)
+        testSudoku4x4(solveMIP, solver)
+
     end
 end
 
 testRoutine(SolveMIP)
 
+#teste P1 TSP de 7 cidades
+#adicionado por Guilherme Bodin
+function test_P1_Guilherme(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+    @testset "Teste da P1 Guilherme (TSP 7 cidades)" begin
+        number_of_nodes = 7
 
-#teste TSP 4 cidades
-#Adicionado por Guilherme Bodin
-function testMinimalTSP(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
-    @testset "Teste TSP 4 cidades" begin
-        AdjacencyMatrix = [0 1 2 3
-                           1 0 2 3
-                           2 2 0 3
-                           3 3 3 0]
+        C = [0.0    135.484   142.801   131.0     117.154   153.473   201.022
+             135.484    0.0     105.546   174.003   142.425    53.0094  105.991
+             142.801  105.546     0.0      87.6641   59.0      63.8905   73.5527
+             131.0    174.003    87.6641    0.0      31.9061  146.932   159.201
+             117.154  142.425    59.0      31.9061    0.0     115.521   132.306
+             153.473   53.0094   63.8905  146.932   115.521     0.0      55.4617
+             201.022  105.991    73.5527  159.201   132.306    55.4617    0.0   ]
 
-        number_of_nodes = 4
+        ans = [0.0   0.0   0.0   1.0   0.0   0.0   0.0
+               1.0   0.0   0.0   0.0   0.0   0.0   0.0
+               0.0   0.0   0.0   0.0   0.0   0.0   1.0
+               0.0   0.0   0.0   0.0   1.0   0.0   0.0
+               0.0   0.0   1.0   0.0   0.0   0.0   0.0
+               0.0   1.0   0.0   0.0   0.0   0.0   0.0
+               0.0   0.0   0.0   0.0   0.0   1.0   0.0]
 
-        del = [1 2 3
-               1 4 5
-               2 4 6
-               3 5 6]
-
-        S = [1 0 1 0 1 0 1 0 1 0 1 0 1 0
-             0 1 1 0 0 1 1 0 0 1 1 0 0 1
-             0 0 0 1 1 1 1 0 0 0 0 1 1 1
-             0 0 0 0 0 0 0 1 1 1 1 1 1 1]
-
-        C = [1 2 3 2 3 3]'
-
-         function edges_no_Subconjunto(pos,Subsets,number_of_nodes) #Seleciona todas as arestas possíveis em uma dada partição do conjunto de vértices
-           A = zeros(1,2)
-           for i=1:number_of_nodes
-             if Subsets[i,pos]==1
-               for j=1:number_of_nodes
-                 if Subsets[j,pos]==0
-                   A = vcat(A,[i j])
-                 end
-               end
-             end
-           end
-           return A
-         end
-
-         function ida_e_volta(A) # Recebe uma matriz A n x 2 e devolve uma matriz result 2*n x 2 com os elementos de A nas linhas 1 até n e o espelhamento dos elementos de A de n+1 até 2*n
-           A_aux = hcat(A,A[:,1])
-           A_aux = A_aux[:,2:3]
-           result = vcat(A,A_aux)
-           return result
-         end
-
-         function selecao_edges(e,edge_do_ciclo)
-           E = []
-           for i=1:size(e,1)
-             for j=1:size(edge_do_ciclo,1)
-               if edge_do_ciclo[j,1] == e[i,1]
-                 if edge_do_ciclo[j,2] == e[i,2]
-                   E = vcat(E,i)
-                 end
-               end
-             end
-           end
-           return E
-         end
-        model = Model(solver = solver)
-        @variable(model, Y[i=1:number_of_edges],Bin)
+        m = Model(solver = solver)
+        @variable(m, X[i=1:number_of_nodes,j=1:number_of_nodes], Bin)
+        @variable(m, u[i=:1:number_of_nodes], Int)
         for i=1:number_of_nodes
-          @constraint(model, sum(Y[del[i,j]] for j=1:number_of_nodes-1) == 2) # Garante que todas as cidades conectadas a 2 estradas (uma de entrada e outra de saída) no caminho ótimo
+            @constraint(m,sum(X[i,j] for j=1:number_of_nodes if j!=i) == 1 )
         end
-        for i=1:size(S,2)
-          edge_do_ciclo = ida_e_volta(edges_no_Subconjunto(i,S,number_of_nodes))
-          E = selecao_edges(e,edge_do_ciclo)
-          @constraint(model, sum(Y[E[j]] for j=1:size(E,1)) >= 2)
+        for j=1:number_of_nodes
+            @constraint(m,sum(X[i,j] for i=1:number_of_nodes if i!=j) == 1 )
         end
-        @objective(model,Min,sum(C[i]*Y[i] for i=1:number_of_edges))
+        for i=2:number_of_nodes
+            for j=2:number_of_nodes
+              if(i!=j)
+                @constraint(m, u[i] - u[j] + number_of_nodes*X[i,j] <= number_of_nodes-1)
+              end
+            end
+        end
+        @objective(m, Min, sum(C[i,j]*X[i,j] for i=1:number_of_nodes, j=1:number_of_nodes))
 
-        sol = solveMIP(model)
-
-        @test model.ext[:status] == :Optimal
-        @test model.colVal == [1, 1, 0, 0, 1, 1]
-        @test model.objVal == 9.0
+        sol = solveMIP(m)
+        @test getobjectivevalue(m) == 539.4139
+        @test getvalue(X) == ans || getvalue(X) == ans'
     end
 end
+
+function test_PL_Infeasible_Guilherme(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+    @testset "Teste PL Infeasible Guilherme" begin
+        m = Model(solver = solver)
+        @variable(m, x[i=1:2])
+        @constraint(m, x[1] == 6)
+        @constraint(m, x[2] == 6)
+        @constraint(m, x[1] + x[2] <=11)
+        @objective(m, Min, x[1]+x[2])
+
+        sol = solveMIP(m)
+        @test m.ext[:status] == :Infeasible
+    end
+end
+
+#teste MIP médio TSP de 20 cidades
+#adicionado por Guilherme Bodin
+function test_MIP_médio_Guilherme(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+    @testset "Teste MIP médio Guilherme (TSP 30 cidades)" begin
+        number_of_nodes = 30
+        srand(12)
+        C = 1000*rand(30,30)
+
+        m = Model(solver = solver)
+        @variable(m, X[i=1:number_of_nodes,j=1:number_of_nodes], Bin)
+        @variable(m, u[i=:1:number_of_nodes], Int)
+        for i=1:number_of_nodes
+            @constraint(m,sum(X[i,j] for j=1:number_of_nodes if j!=i) == 1 )
+        end
+        for j=1:number_of_nodes
+            @constraint(m,sum(X[i,j] for i=1:number_of_nodes if i!=j) == 1 )
+        end
+        for i=2:number_of_nodes
+            for j=2:number_of_nodes
+              if(i!=j)
+                @constraint(m, u[i] - u[j] + number_of_nodes*X[i,j] <= number_of_nodes-1)
+              end
+            end
+        end
+        @objective(m, Min, sum(C[i,j]*X[i,j] for i=1:number_of_nodes, j=1:number_of_nodes))
+
+        sol = solveMIP(m)
+        @test getobjectivevalue(m) ≈ 1645.8508340848819 atol = 1e-7
+    end
+end
+
+#teste MIP grande TSP de 100 cidades
+#adicionado por Guilherme Bodin
+function test_MIP_Grande_Guilherme(solveMIP::Function, solver::MathProgBase.AbstractMathProgSolver = JuMP.UnsetSolver())
+    @testset "Teste MIP Grande Guilherme (TSP 100 cidades)" begin
+        number_of_nodes = 100
+        srand(12)
+        A = 1000*rand(100,100)
+
+        m = Model(solver = solver)
+        @variable(m, X[i=1:number_of_nodes,j=1:number_of_nodes], Bin)
+        @variable(m, u[i=:1:number_of_nodes], Int)
+        for i=1:number_of_nodes
+            @constraint(m,sum(X[i,j] for j=1:number_of_nodes if j!=i) == 1 )
+        end
+        for j=1:number_of_nodes
+            @constraint(m,sum(X[i,j] for i=1:number_of_nodes if i!=j) == 1 )
+        end
+        for i=2:number_of_nodes
+            for j=2:number_of_nodes
+              if(i!=j)
+                @constraint(m, u[i] - u[j] + number_of_nodes*X[i,j] <= number_of_nodes-1)
+              end
+            end
+        end
+        @objective(m, Min, sum(C[i,j]*X[i,j] for i=1:number_of_nodes, j=1:number_of_nodes))
+
+        sol = solveMIP(m)
+        @test getobjectivevalue(m) ≈ 1720.190204078063 atol = 1e-7
+    end
+end
+
+
+
+
+test_P1_Guilherme(SolveMIP, GurobiSolver())
+test_PL_Infeasible_Guilherme(SolveMIP, GurobiSolver())
+test_MIP_médio_Guilherme(SolveMIP, GurobiSolver())
+test_MIP

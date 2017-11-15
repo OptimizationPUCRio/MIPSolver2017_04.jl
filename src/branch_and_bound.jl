@@ -1,6 +1,6 @@
 using JuMP, Gurobi
 
-type Node
+mutable struct Node
     Level::Int
     Model::JuMP.Model
     Zbound::Float64
@@ -8,7 +8,7 @@ type Node
     Status::Symbol
 end
 
-type Best
+mutable struct Best
     Zstar::Float64
     Xstar::Array{Float64}
     Visited::Int
@@ -135,7 +135,6 @@ function SolveMIP(model::JuMP.Model)
 
     while (!isempty(nodes) && iter <= 1000)
         level = level + 1
-        println(level)
         leftChild, rightChild = Branch(nodes[end])
         pop!(nodes)
 
