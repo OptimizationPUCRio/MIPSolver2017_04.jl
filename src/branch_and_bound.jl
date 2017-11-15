@@ -10,6 +10,7 @@ end
 
 mutable struct Best
     Zstar::Float64
+    Zbound::Float64
     Xstar::Array{Float64}
     Intsols::Int
     Visited::Int
@@ -81,8 +82,8 @@ end
 
 function InitializeBest(model::JuMP.Model)
     sense = getobjectivesense(model)
-               #Zstar,             Xstar,                  Intsols    Visited
-    best = Best( -Inf,  Array{Float64}(length(model.colUpper)), 0 ,0) #initialize Best as a Max problem
+               #Zstar,  Zbound           Xstar,                  Intsols    Visited
+    best = Best( -Inf, Inf, Array{Float64}(length(model.colUpper)), 0 ,0) #initialize Best as a Max problem
     if sense == :Min
         best.Zstar = Inf
         best.Zbound = -Inf
@@ -98,13 +99,17 @@ end
 
 function UpdateBest(best::Best, node::Node, sense::Symbol, binaryVariables::Array{Int})
     if sense == :Max
-        if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax[binaryVariables])) #if the bound is better and if all binary variables are integer
+        if node.Zbound < best.Zbound && best.Zbound > best.Zstar
+            best.Zbound = node.Zbound
+        elseif (best.Zbound > best.Zstar && all(isinteger, node.Xrelax[binaryVariables])) #if the bound is better and if all binary variables are integer
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
             best.Intsols = best.Intsols + 1
         end
     else
-        if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax[binaryVariables]))
+        if node.Zbound > best.Zbound && best.Zbound < best.Zstar
+            best.Zbound = node.Zbound
+        elseif (best.Zbound < best.Zstar && all(isinteger, node.Xrelax[binaryVariables]))
             best.Zstar = node.Zbound
             best.Xstar = node.Xrelax
             best.Intsols = best.Intsols + 1
@@ -175,7 +180,7 @@ function SolveMIP(model::JuMP.Model)
     model.ext[:intsols] = best.Intsols
     model.colVal = best.Xstar
     model.objVal = best.Zstar
-    model.objBound = best.Zstar
+    model.objBound = best.Zbound
     time = toc()
     model.ext[:time] = time
 end
