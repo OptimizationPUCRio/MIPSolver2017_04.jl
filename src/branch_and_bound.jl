@@ -137,7 +137,7 @@ function SolveMIP(model::JuMP.Model)
     t2 = 0.01
     iter = 0
     maxiter = 1000 #max iterations
-    tmax = 120 #max time in nanoseconds
+    tmax = 180 #max time in nanoseconds
     level = 0
     solver = GurobiSolver(OutputFlag=0)
     sense = getobjectivesense(model)
