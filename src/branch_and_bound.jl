@@ -39,15 +39,15 @@ function Bound(node::Node, best::Best, sense::Symbol)
         return false
     end
     if sense == :Max #Bound by Limit
-        if best.Zbound < best.Zstar
+        if node.Zbound < best.Zbound
             return false
         end
     else
-        if best.Zbound > best.Zstar
+        if node.Zbound > best.Zbound
             return false
         end
     end
-    if abs(best.Zbound - best.Zstar) <= errortolerance #Bound by Optimality
+    if abs(node.Zbound - best.Zstar) <= errortolerance #Bound by Optimality
         return false
     end
 end
@@ -86,6 +86,7 @@ function InitializeBest(model::JuMP.Model)
     best = Best( -Inf, Inf, Array{Float64}(length(model.colUpper)), 0 ,0) #initialize Best as a Max problem
     if sense == :Min
         best.Zstar = Inf
+        best.Zbound = -Inf
     end
     return best
 end
@@ -100,19 +101,21 @@ function UpdateBest(best::Best, node::Node, sense::Symbol, binaryVariables::Arra
     if sense == :Max
         if (node.Zbound > best.Zstar && all(isinteger, node.Xrelax[binaryVariables])) #if the bound is better and if all binary variables are integer
             best.Zstar = node.Zbound
+            best.Zbound = node.Zbound
             best.Xstar = node.Xrelax
             best.Intsols = best.Intsols + 1
         end
-        if node.Zbound < best.Zbound
+        if (node.Zbound < best.Zbound && node.Zbound > best.Zstar)
             best.Zbound = node.Zbound
         end
     else
         if (node.Zbound < best.Zstar && all(isinteger, node.Xrelax[binaryVariables]))
             best.Zstar = node.Zbound
+            best.Zbound = node.Zbound
             best.Xstar = node.Xrelax
             best.Intsols = best.Intsols + 1
         end
-        if node.Zbound > best.Zbound
+        if (node.Zbound > best.Zbound && node.Zbound < best.Zstar)
             best.Zbound = node.Zbound
         end
     end
@@ -130,8 +133,11 @@ end
 
 function SolveMIP(model::JuMP.Model)
     tic()
+    t1 = time_ns()
+    t2 = 0.01
     iter = 0
-    maxiter = 1000
+    maxiter = 1000 #max iterations
+    tmax = 120 #max time in nanoseconds
     level = 0
     solver = GurobiSolver(OutputFlag=0)
     sense = getobjectivesense(model)
@@ -144,7 +150,7 @@ function SolveMIP(model::JuMP.Model)
     UpdateBest(best, nodes[1], sense, binaryVariableIndexes) #updates best answer
     best.Visited = best.Visited + 1
 
-    while (!isempty(nodes) && iter <= maxiter)
+    while (!isempty(nodes) && iter <= maxiter && t2 <= tmax)
         level = level + 1
         leftChild, rightChild = Branch(nodes[end])
         pop!(nodes)
@@ -169,12 +175,15 @@ function SolveMIP(model::JuMP.Model)
             end
         end
         iter = iter + 1
+        if iter%50 == 0
+            t2 = (time_ns() - t1)/1e9
+        end
     end
 
-    if (iter >= maxiter && all(isinteger, best.Xstar[binaryVariableIndexes])) #have found not optimal integer solutions
+    if ((iter >= maxiter || t2 >= tmax) && all(isinteger, best.Xstar[binaryVariableIndexes])) #have found not optimal integer solutions
         model.ext[:status] = :SubOptimal
-    elseif (iter >= maxiter && ~(all(isinteger, best.Xstar[binaryVariableIndexes]))) #have not found any solutions
-        mode.ext[:status] = :NotResolved
+    elseif ((iter >= maxiter || t2 >= tmax) && ~(all(isinteger, best.Xstar[binaryVariableIndexes]))) #have not found any solutions
+        model.ext[:status] = :NotSolved
     end
 
     model.ext[:nodes] = best.Visited
